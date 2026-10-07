@@ -88,7 +88,7 @@ const verdictText: Record<string, string> = {
 
     <section v-if="store.loaded && !store.list.length" class="card empty">
       <h2>Welcome to Stride</h2>
-      <p>Import your runs from FIT or TCX files (Garmin, Coros, Strava export…). Everything stays on this device.</p>
+      <p>Import your runs from FIT, TCX or GPX files — or your whole Strava export (.zip) in one go. Everything stays on this device.</p>
       <ImportButton />
     </section>
 

@@ -43,7 +43,7 @@ const groups = computed(() => {
     </div>
 
     <p v-if="store.loaded && !store.list.length" class="card empty">
-      No runs yet. Import .fit or .tcx files — you can select many at once. Duplicates are skipped automatically.
+      No runs yet. Import .fit, .tcx or .gpx files (select many at once), a whole folder, or a .zip archive such as your Strava export (Settings → My Account → Download or Delete Your Account → Request your archive). Duplicates and non-runs are skipped automatically.
     </p>
 
     <section v-for="g in groups" :key="g.key" class="card">

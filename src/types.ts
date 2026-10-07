@@ -11,7 +11,7 @@ export interface ActivitySummary {
   distance: number
   sport: string
   name: string
-  source: 'fit' | 'tcx'
+  source: 'fit' | 'tcx' | 'gpx'
   fileName?: string
   importedAt: number
   avgHr?: number

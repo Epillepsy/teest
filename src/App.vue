@@ -1,15 +1,59 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
-import { RouterLink, RouterView } from 'vue-router'
+import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { RouterLink, RouterView, useRouter } from 'vue-router'
 import { useRegisterSW } from 'virtual:pwa-register/vue'
 import { useActivities } from './stores/activities'
 import { useSettings } from './stores/settings'
+import { filesFromDrop } from './lib/dropFiles'
 
 const activities = useActivities()
+const router = useRouter()
 const settings = useSettings()
 const { needRefresh, updateServiceWorker } = useRegisterSW()
 
 onMounted(() => Promise.all([activities.load(), settings.load()]))
+
+// Drop files, folders or a Strava export .zip anywhere to import them.
+const dragging = ref(false)
+let dragDepth = 0
+const hasFiles = (e: DragEvent) => !!e.dataTransfer?.types.includes('Files')
+function onDragEnter(e: DragEvent) {
+  if (!hasFiles(e)) return
+  dragDepth++
+  dragging.value = true
+}
+function onDragLeave(e: DragEvent) {
+  if (!hasFiles(e)) return
+  dragDepth = Math.max(0, dragDepth - 1)
+  if (!dragDepth) dragging.value = false
+}
+function onDragOver(e: DragEvent) {
+  if (hasFiles(e)) e.preventDefault()
+}
+function onDrop(e: DragEvent) {
+  if (!hasFiles(e) || !e.dataTransfer) return
+  e.preventDefault()
+  dragDepth = 0
+  dragging.value = false
+  if (activities.importing) return
+  void filesFromDrop(e.dataTransfer).then((files) => {
+    if (!files.length) return
+    if (router.currentRoute.value.path !== '/runs') void router.push('/runs')
+    void activities.importFiles(files)
+  })
+}
+onMounted(() => {
+  window.addEventListener('dragenter', onDragEnter)
+  window.addEventListener('dragleave', onDragLeave)
+  window.addEventListener('dragover', onDragOver)
+  window.addEventListener('drop', onDrop)
+})
+onBeforeUnmount(() => {
+  window.removeEventListener('dragenter', onDragEnter)
+  window.removeEventListener('dragleave', onDragLeave)
+  window.removeEventListener('dragover', onDragOver)
+  window.removeEventListener('drop', onDrop)
+})
 
 const tabs = [
   { to: '/', label: 'Dashboard', icon: 'M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z' },
@@ -21,6 +65,9 @@ const tabs = [
 
 <template>
   <RouterView />
+  <div v-if="dragging" class="dropzone" aria-hidden="true">
+    <div>Drop files, folders or a .zip to import</div>
+  </div>
   <div v-if="needRefresh" class="update" role="status">
     <span>A new version is available.</span>
     <button class="btn primary" @click="updateServiceWorker(true)">Reload</button>
@@ -60,6 +107,21 @@ const tabs = [
 .tab.router-link-active:not(.exact),
 .tab.exact.router-link-exact-active {
   color: var(--accent);
+}
+.dropzone {
+  position: fixed;
+  inset: 12px;
+  border: 3px dashed var(--accent);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--bg) 85%, transparent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--accent);
+  z-index: 2000;
+  pointer-events: none;
 }
 .update {
   position: fixed;

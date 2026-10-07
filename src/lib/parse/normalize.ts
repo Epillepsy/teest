@@ -6,6 +6,7 @@ const NON_RUN_SPORTS = new Set([
   'cycling', 'biking', 'swimming', 'rowing', 'e_biking', 'motorcycling', 'alpine_skiing',
   'cross_country_skiing', 'snowboarding', 'paddling', 'kayaking', 'sailing', 'golf',
   'training', 'fitness_equipment', 'mountaineering', 'stand_up_paddleboarding', 'surfing',
+  'walking', 'hiking',
 ])
 
 /** Runs, plus files with an unknown sport (TCX "Other", FIT "generic"). */
@@ -42,7 +43,7 @@ export function activityName(startTime: number): string {
 export type NewActivity = { summary: Omit<ActivitySummary, 'id' | 'importedAt'>; streams: Omit<ActivityStreams, 'id'> }
 
 /** Turn parser output into the stored summary + columnar streams. */
-export function buildActivity(parsed: ParsedActivity, source: 'fit' | 'tcx', fileName?: string): NewActivity {
+export function buildActivity(parsed: ParsedActivity, source: ActivitySummary['source'], fileName?: string): NewActivity {
   const pts = parsed.points.filter((p) => Number.isFinite(p.t)).sort((a, b) => a.t - b.t)
   const t0 = pts[0]?.t ?? parsed.startTime
 

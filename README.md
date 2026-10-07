@@ -7,9 +7,14 @@ Import your FIT/TCX files and everything stays on your device in IndexedDB.
 
 ## Features
 
-- **Import** `.fit` / `.tcx` (and `.fit.gz` / `.tcx.gz` from a Strava bulk export). You can pick many files at once.
-  Duplicates are skipped when the start time is within 5 s and the duration within 5 s of a run you already have, or of another file in the same batch.
-  Activities that are clearly not runs (cycling, swimming…) are skipped.
+- **Import** `.fit`, `.tcx` and `.gpx` files, each optionally `.gz`-compressed.
+- **Bulk import:**
+  - **Whole archives:** pick a `.zip`, such as Strava's *Download your data* export (Settings → My Account → Download or Delete Your Account). The archive is read lazily: only the central directory is loaded, then one activity at a time, so multi-GB exports work on a phone. ZIP64 archives are supported.
+  - **Strava `activities.csv`:** if the archive or folder includes it, runs get their Strava names, and rides, walks and other non-runs are skipped without being decompressed.
+  - **Folders and drag-and-drop:** a **Folder…** button on desktop and Android (not iOS, which doesn't support picking folders). On desktop you can also drop files, folders or a zip anywhere in the app.
+  - **Progress and cancel:** activities are saved every 20 files. The import shows live counts (new, duplicate, skipped, failed) and can be cancelled; runs already imported are kept. Re-importing the same archive just reports duplicates.
+  - **Duplicates:** a file is skipped when its start time and its duration are each within 5 s of a run you already have, or of another file in the same import.
+  - **Non-runs:** activities that are clearly not runs (cycling, swimming, walking, hiking…) are skipped.
 - **Runs list**, grouped by month, with search and a "races only" filter.
 - **Activity page:** route map, km splits (pace, HR, elevation), pace/HR/elevation charts with the cursor shown on the map, best efforts, rename, mark as race, delete.
 - **Dashboard:** totals for the week, month and year; 4-week average; distance per week or month for the last 12 periods (with a table view); goal summary; recent runs.
