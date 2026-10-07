@@ -3,16 +3,21 @@ import { computed, ref, shallowRef, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import type uPlot from 'uplot'
 import { useActivities } from '@/stores/activities'
-import type { ActivityStreams } from '@/types'
+import { useSettings } from '@/stores/settings'
+import { DEFAULT_SETTINGS, type ActivityStreams } from '@/types'
 import { computeSplits, rollingPace } from '@/lib/splits'
 import { distanceLabel, formatDate, formatDuration, formatKm, formatPace, paceSecPerKm } from '@/lib/format'
 import { axis, line } from '@/lib/chartTheme'
-import { vdotFromPerformance } from '@/lib/predict/vdot'
+import { trainingPaces, vdotFromPerformance } from '@/lib/predict/vdot'
+import { activityLoad } from '@/lib/predict/load'
+import { currentVdot } from '@/lib/insights'
+import { effectiveHrMax, effortLevel, hrZoneOf, hrZones, paceZoneOf, paceZones, timeInZones, type ZoneTime } from '@/lib/zones'
 import UChart from '@/components/UChart.vue'
 import RunMap from '@/components/RunMap.vue'
 
 const props = defineProps<{ id: string }>()
 const store = useActivities()
+const settingsStore = useSettings()
 const router = useRouter()
 
 const run = computed(() => store.byId.get(props.id))
@@ -79,6 +84,48 @@ const altOpts = computed<Omit<uPlot.Options, 'width' | 'height'>>(() => ({
   axes: [xAxis(), axis({ size: 48 })],
 }))
 
+/** Training paces at the time of this run (falls back to current fitness for early runs). */
+const paces = computed(() => {
+  if (!run.value) return undefined
+  const s = settingsStore.settings
+  const vdot = currentVdot(store.list, s, run.value.startTime) ?? currentVdot(store.list, s, Date.now())
+  return vdot ? trainingPaces(vdot) : undefined
+})
+
+const effort = computed(() => {
+  const r = run.value
+  if (!r) return undefined
+  const s = settingsStore.settings
+  const load = activityLoad(
+    { durationSec: r.duration, distance: r.distance, avgHr: r.avgHr },
+    { hrRest: s.hrRest, hrMax: s.hrMax, sex: s.sex, thresholdPace: paces.value?.threshold },
+  )
+  return { load, level: effortLevel(load), fromHr: !!(r.avgHr && r.avgHr > s.hrRest) }
+})
+
+const hrMax = computed(() => effectiveHrMax(settingsStore.settings.hrMax, DEFAULT_SETTINGS.hrMax, store.list.map((a) => a.maxHr)))
+const hrMaxEstimated = computed(() => hrMax.value !== settingsStore.settings.hrMax)
+const hrZoneTimes = computed(() => {
+  const s = streams.value
+  if (!s?.hr || !s.hr.some((v) => v != null)) return []
+  return timeInZones(s.time, s.hr, hrZones(hrMax.value), hrZoneOf)
+})
+const paceZoneTimes = computed(() => {
+  const s = streams.value
+  if (!s || !paces.value || s.time.length < 2) return []
+  return timeInZones(s.time, rollingPace(s.time, s.distance, 30), paceZones(paces.value), paceZoneOf)
+})
+
+const ZONE_COLORS = ['var(--text-3)', 'var(--series-1)', 'var(--series-3)', 'var(--warning)', 'var(--critical)']
+function hrRange(z: ZoneTime) {
+  if (z.from === 0) return `< ${z.to}`
+  return Number.isFinite(z.to) ? `${z.from}–${z.to - 1}` : `≥ ${z.from}`
+}
+function paceRange(z: ZoneTime) {
+  if (!Number.isFinite(z.from)) return `> ${formatPace(z.to)}`
+  return z.to > 0 ? `${formatPace(z.from)}–${formatPace(z.to)}` : `< ${formatPace(z.from)}`
+}
+
 const efforts = computed(() =>
   Object.entries(run.value?.bestEfforts ?? {})
     .map(([d, t]) => ({ distance: Number(d), time: t }))
@@ -133,6 +180,7 @@ async function remove() {
         <div class="tile"><div class="label">Avg pace</div><div class="value">{{ formatPace(paceSecPerKm(run.distance, run.duration)) }}</div><div class="sub">/km</div></div>
         <div v-if="run.avgHr" class="tile"><div class="label">Heart rate</div><div class="value">{{ run.avgHr }}</div><div class="sub">avg · max {{ run.maxHr ?? '–' }} bpm</div></div>
         <div v-if="run.ascent != null" class="tile"><div class="label">Elevation</div><div class="value">{{ run.ascent }}</div><div class="sub">m gain</div></div>
+        <div v-if="effort" class="tile"><div class="label">Effort</div><div class="value">{{ Math.round(effort.load) }}</div><div class="sub">{{ effort.level }} · {{ effort.fromHr ? 'from HR' : 'est. from pace' }}</div></div>
       </section>
 
       <section class="card race">
@@ -150,6 +198,39 @@ async function remove() {
         <section v-if="streams.lat && streams.lon" class="card">
           <RunMap :lat="streams.lat" :lon="streams.lon" :highlight="cursorIdx" />
         </section>
+
+        <section v-if="hrZoneTimes.length" class="card">
+          <div class="card-head">
+            <h2>Heart rate zones</h2>
+            <span class="small muted">max HR {{ hrMax }}<span v-if="hrMaxEstimated"> (estimated)</span></span>
+          </div>
+          <div class="zones">
+            <div v-for="z in hrZoneTimes" :key="z.index" class="zone-row">
+              <span class="zname"><b>Z{{ z.index }}</b> {{ z.name }}</span>
+              <span class="zrange small muted">{{ hrRange(z) }} bpm</span>
+              <div class="ztrack"><div class="zbar" :style="{ width: z.share * 100 + '%', background: ZONE_COLORS[z.index - 1] }"></div></div>
+              <span class="ztime">{{ formatDuration(z.seconds) }}</span>
+              <span class="zpct small muted">{{ Math.round(z.share * 100) }}%</span>
+            </div>
+          </div>
+        </section>
+
+        <section v-if="paceZoneTimes.length" class="card">
+          <div class="card-head">
+            <h2>Pace zones</h2>
+            <span class="small muted">threshold {{ formatPace(paces!.threshold) }} /km</span>
+          </div>
+          <div class="zones">
+            <div v-for="z in paceZoneTimes" :key="z.index" class="zone-row">
+              <span class="zname"><b>Z{{ z.index }}</b> {{ z.name }}</span>
+              <span class="zrange small muted">{{ paceRange(z) }} /km</span>
+              <div class="ztrack"><div class="zbar" :style="{ width: z.share * 100 + '%', background: ZONE_COLORS[z.index - 1] }"></div></div>
+              <span class="ztime">{{ formatDuration(z.seconds) }}</span>
+              <span class="zpct small muted">{{ Math.round(z.share * 100) }}%</span>
+            </div>
+          </div>
+        </section>
+        <p v-else-if="!paces" class="small muted">Pace zones appear once you have a run of 1 km or more to estimate your fitness from.</p>
 
         <section v-if="splits.length" class="card">
           <h2>Splits</h2>
@@ -210,5 +291,16 @@ async function remove() {
 .race { flex-direction: row; justify-content: space-between; align-items: center; }
 .race p { margin: 2px 0 0; }
 .barcol { width: 40%; }
+.zones { display: flex; flex-direction: column; gap: 8px; }
+.zone-row { display: grid; grid-template-columns: minmax(110px, 1.2fr) minmax(80px, 1fr) 2fr auto 3ch; gap: 8px; align-items: center; font-variant-numeric: tabular-nums; }
+.zname { white-space: nowrap; }
+.ztrack { height: 10px; background: var(--surface-2); border-radius: 4px; overflow: hidden; }
+.zbar { height: 100%; border-radius: 0 4px 4px 0; }
+.ztime, .zpct { text-align: right; }
+@media (max-width: 480px) {
+  .zone-row { grid-template-columns: 1fr auto auto; }
+  .zrange { grid-column: 1; grid-row: 2; }
+  .ztrack { grid-column: 1 / -1; grid-row: 3; }
+}
 .bar { height: 10px; border-radius: 0 4px 4px 0; background: var(--series-1); }
 </style>

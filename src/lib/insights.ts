@@ -39,6 +39,12 @@ export function personalRecords(activities: ActivitySummary[], sinceMs = -Infini
   return EFFORT_DISTANCES.filter((d) => best.has(d)).map((d) => best.get(d)!)
 }
 
+/** Current VDOT from recent best efforts, as used by the predictor. */
+export function currentVdot(activities: ActivitySummary[], s: Settings, now: number): number | undefined {
+  const efforts = effortsFrom(activities)
+  return predictRace(efforts, PREDICT_DISTANCES[0], { now, windowDays: s.predictorWindowDays })?.vdot
+}
+
 export interface Insights {
   predictions: Prediction[]
   vdot?: number
