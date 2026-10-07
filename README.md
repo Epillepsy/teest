@@ -46,15 +46,18 @@ npm test           # vitest
 npm run build      # type-check + production build to dist/
 ```
 
-## Deploy to Cloudflare Pages
+## Deploy to Cloudflare
 
-1. In Cloudflare, go to Workers & Pages → Create → Pages → Connect to Git, and pick this repo.
-2. Build command: `npm run build`. Output directory: `dist`. Set the environment variable `NODE_VERSION=22`.
-3. `public/_redirects` handles the SPA fallback. `public/_headers` makes `sw.js` and `index.html` revalidate, so updates show up, and gives hashed assets immutable caching.
+The app is deployed as a static-assets-only Cloudflare Worker, configured in `wrangler.jsonc`.
+
+1. In Cloudflare, go to Workers & Pages → Create → Import a repository, and pick this repo.
+2. Build command: `pnpm run build` (or `npm run build`). Deploy command: `npx wrangler deploy`.
+3. `wrangler.jsonc` uploads `dist/`. Its `"not_found_handling": "single-page-application"` setting serves `index.html` for unknown paths, so deep links like `/runs/<id>` load on refresh. Workers rejects the Pages-style `/* /index.html 200` redirect, which is why there is no `_redirects` file.
+4. `public/_headers` makes `sw.js` revalidate, so updates show up, and gives hashed assets immutable caching.
 
 ## Install on your phone
 
-Open the Pages URL. On iOS, open it in Safari, tap Share, then "Add to Home Screen". On Android, use Chrome's ⋮ menu and choose "Install app".
+Open the deployed URL. On iOS, open it in Safari, tap Share, then "Add to Home Screen". On Android, use Chrome's ⋮ menu and choose "Install app".
 After an update, a "new version available" banner appears.
 
 > Your data lives only in that browser's storage. Export a backup now and then. On iOS, the home-screen app has its own storage, separate from Safari tabs.
