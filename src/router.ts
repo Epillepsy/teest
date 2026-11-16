@@ -7,6 +7,7 @@ export const router = createRouter({
     { path: '/', name: 'dashboard', component: DashboardView },
     { path: '/runs', name: 'runs', component: () => import('./views/RunsView.vue') },
     { path: '/runs/:id', name: 'activity', component: () => import('./views/ActivityView.vue'), props: true },
+    { path: '/plan', name: 'plan', component: () => import('./views/PlanView.vue') },
     { path: '/insights', name: 'insights', component: () => import('./views/InsightsView.vue') },
     { path: '/settings', name: 'settings', component: () => import('./views/SettingsView.vue') },
     { path: '/:pathMatch(.*)*', redirect: '/' },

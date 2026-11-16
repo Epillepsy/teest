@@ -4,14 +4,16 @@ import { RouterLink, RouterView, useRouter } from 'vue-router'
 import { useRegisterSW } from 'virtual:pwa-register/vue'
 import { useActivities } from './stores/activities'
 import { useSettings } from './stores/settings'
+import { usePlan } from './stores/plan'
 import { filesFromDrop } from './lib/dropFiles'
 
 const activities = useActivities()
 const router = useRouter()
 const settings = useSettings()
+const plan = usePlan()
 const { needRefresh, updateServiceWorker } = useRegisterSW()
 
-onMounted(() => Promise.all([activities.load(), settings.load()]))
+onMounted(() => Promise.all([activities.load(), settings.load(), plan.load()]))
 
 // Drop files, folders or a Strava export .zip anywhere to import them.
 const dragging = ref(false)
@@ -58,6 +60,7 @@ onBeforeUnmount(() => {
 const tabs = [
   { to: '/', label: 'Dashboard', icon: 'M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z' },
   { to: '/runs', label: 'Runs', icon: 'M13.5 5.5a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM9.8 8.9 7 23h2.1l1.8-8 2.1 2v6h2v-7.5l-2.1-2 .6-3A7.3 7.3 0 0 0 19 13v-2c-1.9 0-3.5-1-4.3-2.4l-1-1.6a2 2 0 0 0-1.7-1c-.3 0-.5.1-.8.1L6 8.3V13h2V9.6l1.8-.7' },
+  { to: '/plan', label: 'Plan', icon: 'M19 4h-1V2h-2v2H8V2H6v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2zm0 16H5V9h14v11zm-8.6-2.3-3.5-3.5 1.4-1.4 2.1 2.1 4.6-4.6 1.4 1.4-6 6z' },
   { to: '/insights', label: 'Insights', icon: 'M3.5 18.5 9.5 12.5l4 4L22 6.9 20.6 5.5l-7.1 8-4-4L2 17z' },
   { to: '/settings', label: 'Settings', icon: 'M19.4 13a7.6 7.6 0 0 0 0-2l2.1-1.6-2-3.5-2.5 1a7.4 7.4 0 0 0-1.7-1L15 3.3h-4l-.4 2.6a7.4 7.4 0 0 0-1.7 1l-2.5-1-2 3.5L6.6 11a7.6 7.6 0 0 0 0 2l-2.1 1.6 2 3.5 2.5-1c.5.4 1.1.7 1.7 1l.4 2.6h4l.4-2.6c.6-.3 1.2-.6 1.7-1l2.5 1 2-3.5L19.4 13zM13 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z' },
 ]
@@ -87,7 +90,7 @@ const tabs = [
   height: calc(var(--nav-h) + env(safe-area-inset-bottom));
   padding-bottom: env(safe-area-inset-bottom);
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   background: color-mix(in srgb, var(--surface) 92%, transparent);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);

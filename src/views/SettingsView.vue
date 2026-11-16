@@ -2,6 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useActivities } from '@/stores/activities'
 import { useSettings } from '@/stores/settings'
+import { usePlan } from '@/stores/plan'
 import { backupFileName, createBackup } from '@/lib/backup'
 import { formatDuration, parseDuration } from '@/lib/format'
 import { requestPersistence } from '@/lib/db'
@@ -9,6 +10,7 @@ import type { Settings } from '@/types'
 
 const store = useActivities()
 const settingsStore = useSettings()
+const planStore = usePlan()
 
 const draft = ref<Settings>({ ...settingsStore.settings })
 const goalTimeText = ref(formatDuration(draft.value.goalTime))
@@ -75,7 +77,7 @@ async function importJson(e: Event) {
   try {
     const data = JSON.parse(await file.text())
     const r = await store.restore(data, restoreSettings.value)
-    if (restoreSettings.value) await settingsStore.load()
+    if (restoreSettings.value) await Promise.all([settingsStore.load(), planStore.load()])
     message.value = `Restored ${r.added} runs (${r.duplicates} already present).`
   } catch (err) {
     message.value = `Restore failed: ${err instanceof Error ? err.message : String(err)}`
@@ -146,14 +148,14 @@ async function deleteAll() {
       <h2>Backup</h2>
       <p class="small muted">
         Your data lives only in this browser. Export a JSON backup regularly (e.g. to iCloud Drive / Google Drive) — it includes
-        every run with its GPS and heart-rate samples, plus these settings.
+        every run with its GPS and heart-rate samples, plus these settings and your training plan progress.
       </p>
       <div class="row">
         <button class="btn primary" :disabled="busy || !store.list.length" @click="exportJson">Export backup</button>
         <button class="btn" :disabled="busy" @click="fileInput?.click()">Restore from backup…</button>
         <input ref="fileInput" type="file" accept="application/json,.json" hidden @change="importJson" />
       </div>
-      <label class="check"><input v-model="restoreSettings" type="checkbox" /> Also restore settings</label>
+      <label class="check"><input v-model="restoreSettings" type="checkbox" /> Also restore settings and plan progress</label>
       <p v-if="message" class="small" role="status">{{ message }}</p>
     </section>
 

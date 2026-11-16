@@ -1,6 +1,7 @@
 import type { ActivityStreams, ActivitySummary, Settings } from '@/types'
 import { db, type RunDB } from './db'
 import { saveActivities } from './importer'
+import { PLAN_PROGRESS_KEY, type PlanProgress } from './plan/progress'
 
 export const BACKUP_FORMAT = 'stride-backup'
 export const BACKUP_VERSION = 1
@@ -14,14 +15,17 @@ export interface Backup {
   version: number
   exportedAt: string
   settings?: Settings
+  /** Training plan ticks, km and notes (added without a version bump: older apps ignore it). */
+  planProgress?: PlanProgress
   activities: BackupActivity[]
 }
 
 export async function createBackup(database: RunDB = db): Promise<Backup> {
-  const [activities, streams, settings] = await Promise.all([
+  const [activities, streams, settings, planProgress] = await Promise.all([
     database.activities.orderBy('startTime').toArray(),
     database.streams.toArray(),
     database.kv.get('settings'),
+    database.kv.get(PLAN_PROGRESS_KEY),
   ])
   const byId = new Map(streams.map((s) => [s.id, s]))
   return {
@@ -29,6 +33,7 @@ export async function createBackup(database: RunDB = db): Promise<Backup> {
     version: BACKUP_VERSION,
     exportedAt: new Date().toISOString(),
     settings: settings?.value as Settings | undefined,
+    ...(planProgress ? { planProgress: planProgress.value as PlanProgress } : {}),
     activities: activities.map((a) => {
       const s = byId.get(a.id)
       if (!s) return a
@@ -60,6 +65,7 @@ export async function restoreBackup(data: unknown, opts: { restoreSettings?: boo
   }))
   const results = await saveActivities(items, database)
   if (opts.restoreSettings && backup.settings) await database.kv.put({ key: 'settings', value: backup.settings })
+  if (opts.restoreSettings && backup.planProgress) await database.kv.put({ key: PLAN_PROGRESS_KEY, value: backup.planProgress })
   return {
     added: results.filter((r) => r.status === 'imported').length,
     duplicates: results.filter((r) => r.status === 'duplicate').length,
