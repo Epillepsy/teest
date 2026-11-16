@@ -4,6 +4,9 @@ import { RouterLink } from 'vue-router'
 import uPlot from 'uplot'
 import { useActivities } from '@/stores/activities'
 import { useSettings } from '@/stores/settings'
+import { usePlan } from '@/stores/plan'
+import { currentWeekIndex } from '@/lib/plan/solirun'
+import { weekTotals } from '@/lib/plan/progress'
 import { aggregate, startOfMonth, startOfWeek, type Period } from '@/lib/aggregate'
 import { formatDate, formatDuration, formatKm, formatPace, paceSecPerKm } from '@/lib/format'
 import { axis, cssVar } from '@/lib/chartTheme'
@@ -14,6 +17,12 @@ import RunRow from '@/components/RunRow.vue'
 
 const store = useActivities()
 const settingsStore = useSettings()
+const planStore = usePlan()
+const planWeek = computed(() => {
+  const i = currentWeekIndex(planStore.plan)
+  return i < 0 ? undefined : planStore.plan.weeks[i]
+})
+const planWeekTotals = computed(() => (planWeek.value ? weekTotals(planWeek.value, planStore.status) : undefined))
 const period = ref<Period>('week')
 const now = Date.now()
 
@@ -144,6 +153,19 @@ const verdictText: Record<string, string> = {
         </details>
       </section>
 
+      <RouterLink v-if="planWeek && planWeekTotals" to="/plan" class="card plan">
+        <div class="card-head">
+          <h2>Plan · week {{ planWeek.n }}: {{ planWeek.block }}</h2>
+          <span class="tiny num">{{ planWeekTotals.done }}/{{ planWeekTotals.total }} · {{ Math.round(planWeekTotals.km * 10) / 10 }} / {{ planWeek.plannedKm }} km</span>
+        </div>
+        <ul class="plan-list">
+          <li v-for="s in planWeek.sessions" :key="s.id" :class="{ done: planStore.status(s).done }">
+            <span class="mark" aria-hidden="true">{{ planStore.status(s).done ? '✓' : '○' }}</span>
+            <span><strong>{{ s.day }}</strong> · {{ s.name }}<template v-if="s.km"> · {{ s.km }} km</template></span>
+          </li>
+        </ul>
+      </RouterLink>
+
       <RouterLink v-if="insights?.goal" to="/insights" class="card goal">
         <div class="card-head">
           <h2>Goal: {{ formatKm(settingsStore.settings.goalDistance, 1) }} km in {{ formatDuration(settingsStore.settings.goalTime) }}</h2>
@@ -171,6 +193,12 @@ const verdictText: Record<string, string> = {
 
 <style scoped>
 .goal { color: var(--text); }
+.plan { color: var(--text); }
+.plan-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 0.9rem; }
+.plan-list li { display: flex; gap: 8px; }
+.plan-list li.done { color: var(--text-2); }
+.plan-list .mark { width: 1.2em; color: var(--text-3); }
+.plan-list li.done .mark { color: var(--good); }
 .goal-row { display: flex; gap: 16px; align-items: center; }
 .big { font-size: 2.2rem; font-weight: 800; color: var(--accent); }
 small { font-size: 0.8rem; font-weight: 500; color: var(--text-2); }
