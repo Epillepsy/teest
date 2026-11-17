@@ -31,11 +31,38 @@ export interface PlanWeek {
   plannedKm: number
 }
 
+export interface PaceRow {
+  effort: string
+  pace: string
+  hr: string
+  cadence: string
+}
+
+export interface QualityItem {
+  /** Short label, e.g. "Q4". */
+  label: string
+  title: string
+  note: string
+  week: number
+  /** Local date, YYYY-MM-DD. */
+  date: string
+}
+
+export interface RuleSection {
+  title: string
+  items: string[]
+}
+
 export interface Plan {
   id: string
   title: string
   subtitle: string
+  /** Local date of the race, YYYY-MM-DD. */
   raceDate: string
+  paces: PaceRow[]
+  paceNote: string
+  quality: QualityItem[]
+  rules: RuleSection[]
   weeks: PlanWeek[]
 }
 
@@ -60,29 +87,29 @@ export function addDays(d: Date, n: number): Date {
 
 const shortDay = (d: Date) => d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })
 
-export const PACES = [
+const PACES: PaceRow[] = [
   { effort: 'Easy (footing, long run)', pace: '6:45–7:15', hr: '≤ 145 (Z2)', cadence: '165–170' },
-  { effort: 'Aerobic speed reps', pace: '~5:40', hr: 'hard but smooth', cadence: '170–175' },
+  { effort: 'Short reps (VO2max, ~5k pace)', pace: '5:10–5:20', hr: 'hard, builds to ~180', cadence: '175–180' },
   { effort: 'Threshold', pace: '5:48–5:50', hr: '~165–172', cadence: '170–175' },
   { effort: 'Race-specific', pace: '5:25–5:32', hr: '~172–180', cadence: '175–180' },
   { effort: 'Goal 10k (sub 55)', pace: '5:30', hr: '—', cadence: '—' },
 ]
 
-export const QUALITY: Record<number, [string, string]> = {
-  1: ['8 × 1 min at ~5:40, 1 min easy between', 'Aerobic speed. Smooth, not a sprint.'],
-  2: ['6 × 2 min at ~5:40, 1 min easy between', 'Same pace, longer reps.'],
-  3: ['6 × 1 min at 5:40, 1 min easy between', 'Deload week, keep it light.'],
+const QUALITY: Record<number, [string, string]> = {
+  1: ['8 × 1 min at 5:10–5:15, 1:30 easy between', 'About 5k pace. Fast but relaxed, form stays tidy.'],
+  2: ['6 × 2 min at 5:20, 1:30 easy between', 'Slightly longer reps, just under 5k effort.'],
+  3: ['6 × 1 min at 5:10–5:15, 1:30 easy between', 'Deload week, keep it light.'],
   4: ['4 × 4 min at 5:50 (threshold), 90 s jog between', 'Comfortably hard. You could say a few words, not a sentence.'],
   5: ['3 × 7 min at 5:48, 2 min jog between', 'Longer threshold blocks.'],
-  6: ['5 × 1 min at 5:30, 1 min easy between', 'Deload week, short and sharp.'],
-  7: ['5 × 1 km at 5:25, 90 s jog between', 'First race-specific session.'],
+  6: ['5 × 1 min at 5:10, 1:30 easy between', 'Deload week, short and sharp.'],
+  7: ['5 × 1 km at 5:20, 2 min jog between', 'Just faster than goal pace, short jog recoveries.'],
   8: ['4 × 2 km at 5:32, 2:30 jog between', 'Hold the pace evenly across all four.'],
   9: ['3 × 3 km at 5:30, 3 min jog between', 'Goal pace. This is the key session of the block.'],
-  10: ['6 × 1 min at 5:25, 1 min easy between', 'Deload week, stay fresh.'],
-  11: ['3 × 2 km at 5:28, 2:30 jog between', 'Last hard session. Finish by Wed Mar 10.'],
+  10: ['6 × 1 min at 5:10, 1:30 easy between', 'Deload week, stay fresh.'],
+  11: ['3 × 2 km at 5:25, 2:30 jog between', 'Last hard session. Finish by Wed Mar 10.'],
 }
 
-export const RULES: { title: string; items: string[] }[] = [
+const RULES: { title: string; items: string[] }[] = [
   {
     title: 'Weekly layout',
     items: [
@@ -194,32 +221,41 @@ function buildWeeks(): PlanWeek[] {
   })
 }
 
+const BUILTIN_WEEKS = buildWeeks()
+
+/** Quality sessions in plan order, with the week and day they fall on. */
+export function qualityFromWeeks(weeks: PlanWeek[], describe: (q: number) => [string, string]): QualityItem[] {
+  const out: QualityItem[] = []
+  for (const w of weeks) {
+    for (const s of w.sessions) {
+      const m = /^Q(\d+) /.exec(s.name)
+      if (m) {
+        const [title, note] = describe(Number(m[1]))
+        out.push({ label: `Q${m[1]}`, title, note, week: w.n, date: s.date })
+      }
+    }
+  }
+  return out
+}
+
+/** Built-in plan, used until the runner imports a plan file. */
 export const SOLIRUN_PLAN: Plan = {
   id: 'solirun-2027',
   title: "Soli'run 10 km · Sunday 21 March 2027",
   subtitle: 'Bois de Boulogne · 18 weeks from Nov 16 · goal: sub 55 (provisional paces, reset after the 5k time trial in week 11)',
   raceDate: '2027-03-21',
-  weeks: buildWeeks(),
+  paces: PACES,
+  paceNote:
+    'All quality paces are provisional. After the 5k time trial in week 11, they are recalculated. Do every quality session on flat road, with a 10 min easy warm-up (3 strides) and a 10 min cooldown.',
+  quality: qualityFromWeeks(BUILTIN_WEEKS, (q) => QUALITY[q]),
+  rules: RULES,
+  weeks: BUILTIN_WEEKS,
 }
 
 /** Index of the week containing `today`, 0 before the plan starts, -1 after it ends. */
 export function currentWeekIndex(plan: Plan, today: Date = new Date()): number {
   const t = isoDay(today)
+  if (!plan.weeks.length) return -1
   if (t < plan.weeks[0].start) return 0
   return plan.weeks.findIndex((w) => t >= w.start && t <= w.end)
-}
-
-/** Week number and planned date of each quality session, for the overview list. */
-export function qualityOverview(plan: Plan) {
-  const out: { q: number; week: number; date: string; title: string; note: string }[] = []
-  for (const w of plan.weeks) {
-    for (const s of w.sessions) {
-      const m = /^Q(\d+) /.exec(s.name)
-      if (m) {
-        const q = Number(m[1])
-        out.push({ q, week: w.n, date: s.date, title: QUALITY[q][0], note: QUALITY[q][1] })
-      }
-    }
-  }
-  return out
 }

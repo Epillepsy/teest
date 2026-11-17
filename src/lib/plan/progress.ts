@@ -3,6 +3,8 @@ import { addDays, isoDay, parseDay, type Plan, type PlanSession, type PlanWeek }
 
 /** kv key holding the runner's plan progress. */
 export const PLAN_PROGRESS_KEY = 'plan-progress'
+/** kv key holding an imported plan file (absent: built-in plan). */
+export const PLAN_KEY = 'plan'
 
 /** What the runner set by hand. Anything missing falls back to the matched run. */
 export interface PlanProgress {

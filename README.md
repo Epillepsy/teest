@@ -24,8 +24,63 @@ Import your FIT/TCX files and everything stays on your device in IndexedDB.
   - **Training paces** (E/M/T/I) from your current VDOT.
   - **Fitness and load:** Banister TRIMP, with CTL (42 d), ATL (7 d) and TSB.
   - **Goal feasibility:** your probability of hitting a target time on a date. The default is sub-55:00 10K on 15 Nov 2026; change it in Settings.
-- **Backup:** export everything (runs, samples and settings) to JSON and restore with merge and dedupe. On phones the export goes through the share sheet, so you can save it to iCloud Drive or Google Drive.
+- **Training plan:** a Plan tab with week cards, sessions to tick off, actual km and notes, a pace table, quality sessions and rules. Imported runs tick the matching session automatically: the same day or one day off, at 0.4–2× the planned km. Manual ticks and km override the match. Update the plan by importing a plan file (see below) instead of rebuilding the app.
+- **Backup:** export everything (runs, samples, settings, the imported plan and plan progress) to JSON and restore with merge and dedupe. On phones the export goes through the share sheet, so you can save it to iCloud Drive or Google Drive.
 - **Offline:** an installable PWA. The app shell is precached, and map tiles you have viewed are cached.
+
+## Plan file format
+
+**Plan → Import plan…** takes a JSON file in this format and replaces the current plan. The plan artifact's **Download for Stride** button produces one. Ticks, km and notes are kept, because they are keyed by session `id` and week `n`. Keep ids stable when you revise a plan (e.g. `w9-q` stays the Friday session of week 9). **Use built-in plan** goes back to the plan shipped with the app.
+
+A minimal two-week example:
+
+```json
+{
+  "format": "stride-plan",
+  "version": 1,
+  "id": "my-10k-2027",
+  "title": "Spring 10 km · Sunday 21 March 2027",
+  "subtitle": "Goal: sub 55",
+  "raceDate": "2027-03-21",
+  "paces": [
+    { "effort": "Easy", "pace": "6:45–7:15", "hr": "≤ 145", "cadence": "165–170" },
+    { "effort": "Goal 10k", "pace": "5:30", "hr": "—", "cadence": "—" }
+  ],
+  "paceNote": "Paces are provisional until the 5k time trial.",
+  "quality": [
+    { "label": "Q1", "title": "8 × 1 min at 5:10, 1:30 easy between", "note": "Fast but relaxed.", "week": 2, "date": "2026-11-27" }
+  ],
+  "rules": [
+    { "title": "Weekly layout", "items": ["Monday: long run.", "Wednesday: footing.", "Friday: quality session."] }
+  ],
+  "weeks": [
+    {
+      "n": 1, "block": "Rest", "kind": "rest", "start": "2026-11-16", "end": "2026-11-22",
+      "sessions": [
+        { "id": "w1-rest", "date": "", "day": "All week", "type": "rest", "name": "Full rest", "detail": "No running.", "km": 0 }
+      ]
+    },
+    {
+      "n": 2, "block": "Base", "kind": "build", "start": "2026-11-23", "end": "2026-11-29", "gym": "Deload",
+      "sessions": [
+        { "id": "w2-long", "date": "2026-11-23", "day": "Mon 23 Nov", "type": "long", "name": "Long run", "detail": "Easy, conversational.", "km": 7 },
+        { "id": "w2-foot", "date": "2026-11-25", "day": "Wed 25 Nov", "type": "footing", "name": "Footing", "detail": "Easy.", "km": 5 },
+        { "id": "w2-q", "date": "2026-11-27", "day": "Fri 27 Nov", "type": "quality", "name": "Q1 · 8 × 1 min at 5:10", "detail": "About 5 km with warm-up and cooldown.", "km": 5 }
+      ]
+    }
+  ]
+}
+```
+
+| Field | Notes |
+|---|---|
+| `format`, `version` | Always `"stride-plan"` and `1`. |
+| `raceDate`, `start`, `end`, `date` | Local dates, `YYYY-MM-DD`. A session `date` may be `""` for an all-week entry such as a rest week. Weeks must be in order. |
+| `kind` (week) | `build`, `rest`, `deload` or `test`. Optional; defaults to `build`. |
+| `type` (session) | `rest`, `long`, `footing`, `quality`, `test` or `race`. |
+| `km` | Planned km, `0` for rest. Sessions with a date and `km > 0` are auto-matched to imported runs. |
+| `day` | The label shown before the session name. |
+| `gym`, `subtitle`, `detail`, `paces`, `paceNote`, `quality`, `rules` | Optional, for display only. |
 
 ## Prediction math (`src/lib/predict`, all unit-tested)
 

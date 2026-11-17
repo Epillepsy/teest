@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import { usePlan } from '@/stores/plan'
-import { currentWeekIndex, parseDay, PACES, qualityOverview, RULES, type PlanWeek } from '@/lib/plan/solirun'
+import { currentWeekIndex, parseDay, type PlanWeek } from '@/lib/plan/solirun'
 import { weekTotals } from '@/lib/plan/progress'
 
 const store = usePlan()
@@ -10,21 +10,45 @@ onMounted(() => {
   if (!store.loaded) void store.load()
 })
 
-const plan = store.plan
+const plan = computed(() => store.plan)
 const tab = ref<'plan' | 'quality' | 'rules'>('plan')
-const nowIdx = currentWeekIndex(plan)
+const nowIdx = computed(() => currentWeekIndex(plan.value))
 
 const daysToRace = computed(() => {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
-  return Math.round((parseDay(plan.raceDate).getTime() - today.getTime()) / 86400000)
+  return Math.round((parseDay(plan.value.raceDate).getTime() - today.getTime()) / 86400000)
 })
 
 const fmt = (iso: string) => parseDay(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
 const km1 = (n: number) => String(Math.round(n * 10) / 10)
 const totalsFor = (w: PlanWeek) => weekTotals(w, store.status)
-const quality = qualityOverview(plan)
 const pct = computed(() => (store.totals.total ? (store.totals.done / store.totals.total) * 100 : 0))
+
+const fileInput = ref<HTMLInputElement>()
+const importMsg = ref('')
+const importOk = ref(true)
+async function onPlanFile(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+  try {
+    const p = await store.importPlan(JSON.parse(await file.text()))
+    const sessions = p.weeks.reduce((a, w) => a + w.sessions.length, 0)
+    importOk.value = true
+    importMsg.value = `Imported "${p.title}": ${p.weeks.length} weeks, ${sessions} sessions. Your ticks and notes were kept.`
+  } catch (err) {
+    importOk.value = false
+    importMsg.value = `Import failed: ${err instanceof SyntaxError ? 'the file is not valid JSON' : err instanceof Error ? err.message : String(err)}`
+  }
+}
+async function resetPlan() {
+  if (!confirm('Go back to the built-in plan? Your ticks and notes are kept.')) return
+  await store.resetPlan()
+  importOk.value = true
+  importMsg.value = 'Back on the built-in plan.'
+}
 
 const chip: Record<string, string> = { deload: 'Deload', test: 'Test', rest: 'Rest' }
 </script>
@@ -53,7 +77,13 @@ const chip: Record<string, string> = { deload: 'Deload', test: 'Test', rest: 'Re
       <div class="bar" role="progressbar" aria-label="Sessions completed" :aria-valuenow="Math.round(pct)" aria-valuemin="0" aria-valuemax="100">
         <i :style="{ width: pct + '%' }" />
       </div>
-      <p class="tiny">Imported runs tick the matching session automatically (same day or one day off, similar distance). You can untick or override the km by hand. Everything stays on this device.</p>
+      <div class="plan-actions">
+        <button class="btn" @click="fileInput?.click()">Import plan…</button>
+        <button v-if="store.imported" class="btn" @click="resetPlan">Use built-in plan</button>
+        <input ref="fileInput" type="file" accept="application/json,.json" hidden @change="onPlanFile" />
+      </div>
+      <p v-if="importMsg" class="small" :class="{ err: !importOk }" role="status">{{ importMsg }}</p>
+      <p class="tiny">Import a plan file from the plan's "Download for Stride" button to update it. Imported runs tick the matching session automatically (same day or one day off, similar distance). You can untick or override the km by hand. Everything stays on this device.</p>
     </header>
 
     <div class="seg" role="tablist" aria-label="Plan sections">
@@ -126,25 +156,25 @@ const chip: Record<string, string> = { deload: 'Deload', test: 'Test', rest: 'Re
           <table>
             <thead><tr><th>Effort</th><th>Pace /km</th><th>HR</th><th>Cadence</th></tr></thead>
             <tbody>
-              <tr v-for="p in PACES" :key="p.effort"><td>{{ p.effort }}</td><td>{{ p.pace }}</td><td>{{ p.hr }}</td><td>{{ p.cadence }}</td></tr>
+              <tr v-for="p in plan.paces" :key="p.effort"><td>{{ p.effort }}</td><td>{{ p.pace }}</td><td>{{ p.hr }}</td><td>{{ p.cadence }}</td></tr>
             </tbody>
           </table>
         </div>
-        <p class="small muted">All quality paces are provisional. After the 5k time trial in week 11, they are recalculated. Do every quality session on flat road, with a 10 min easy warm-up (3 strides) and a 10 min cooldown.</p>
+        <p v-if="plan.paceNote" class="small muted">{{ plan.paceNote }}</p>
       </section>
       <section class="card">
-        <h2>The 11 quality sessions</h2>
+        <h2>The {{ plan.quality.length }} quality sessions</h2>
         <div class="q">
-          <template v-for="q in quality" :key="q.q">
-            <span class="qid">Q{{ q.q }}</span>
-            <span><b>{{ q.title }}</b><br /><span class="small muted">Week {{ q.week }} ({{ fmt(q.date) }}). {{ q.note }}</span></span>
+          <template v-for="q in plan.quality" :key="q.label">
+            <span class="qid">{{ q.label }}</span>
+            <span><b>{{ q.title }}</b><br /><span class="small muted">Week {{ q.week }}<template v-if="q.date"> ({{ fmt(q.date) }})</template>. {{ q.note }}</span></span>
           </template>
         </div>
       </section>
     </template>
 
     <template v-else>
-      <section v-for="r in RULES" :key="r.title" class="card">
+      <section v-for="r in plan.rules" :key="r.title" class="card">
         <h2>{{ r.title }}</h2>
         <ul>
           <li v-for="item in r.items" :key="item">{{ item }}</li>
@@ -156,6 +186,8 @@ const chip: Record<string, string> = { deload: 'Deload', test: 'Test', rest: 'Re
 
 <style scoped>
 .top .sub { margin: 4px 0 0; }
+.plan-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.err { color: var(--critical); }
 .stat .value { font-size: 1.4rem; font-weight: 700; }
 .stat .label { font-size: 0.75rem; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.04em; }
 .bar { height: 8px; border-radius: 4px; background: var(--surface-2); overflow: hidden; }

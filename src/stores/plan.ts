@@ -1,32 +1,45 @@
 import { defineStore } from 'pinia'
-import { computed, ref, toRaw } from 'vue'
+import { computed, ref, shallowRef } from 'vue'
 import { db } from '@/lib/db'
-import { SOLIRUN_PLAN, type PlanSession } from '@/lib/plan/solirun'
-import { emptyProgress, PLAN_PROGRESS_KEY, matchRuns, sessionStatus, weekTotals, type PlanProgress } from '@/lib/plan/progress'
+import { SOLIRUN_PLAN, type Plan, type PlanSession } from '@/lib/plan/solirun'
+import { parsePlanFile, toPlanFile } from '@/lib/plan/file'
+import { emptyProgress, PLAN_KEY, PLAN_PROGRESS_KEY, matchRuns, sessionStatus, weekTotals, type PlanProgress } from '@/lib/plan/progress'
 import { useActivities } from './activities'
 
 export const usePlan = defineStore('plan', () => {
-  const plan = SOLIRUN_PLAN
+  /** The imported plan, or the built-in one until a plan file is imported. */
+  const plan = shallowRef<Plan>(SOLIRUN_PLAN)
+  const imported = ref(false)
   const activities = useActivities()
   const progress = ref<PlanProgress>(emptyProgress())
   const loaded = ref(false)
 
   async function load() {
-    const row = await db.kv.get(PLAN_PROGRESS_KEY)
+    const [row, planRow] = await Promise.all([db.kv.get(PLAN_PROGRESS_KEY), db.kv.get(PLAN_KEY)])
+    plan.value = SOLIRUN_PLAN
+    imported.value = false
+    if (planRow) {
+      try {
+        plan.value = parsePlanFile(planRow.value)
+        imported.value = true
+      } catch {
+        // A stored plan that no longer validates falls back to the built-in one.
+      }
+    }
     progress.value = { ...emptyProgress(), ...((row?.value as Partial<PlanProgress>) ?? {}) }
     loaded.value = true
   }
 
   async function persist() {
-    await db.kv.put({ key: PLAN_PROGRESS_KEY, value: structuredClone(toRaw(progress.value)) })
+    await db.kv.put({ key: PLAN_PROGRESS_KEY, value: JSON.parse(JSON.stringify(progress.value)) })
   }
 
-  const matches = computed(() => matchRuns(plan, activities.list))
+  const matches = computed(() => matchRuns(plan.value, activities.list))
   const status = (s: PlanSession) => sessionStatus(s, progress.value, matches.value, activities.byId)
 
   const totals = computed(() => {
     let done = 0, total = 0, km = 0, planned = 0
-    for (const w of plan.weeks) {
+    for (const w of plan.value.weeks) {
       const t = weekTotals(w, status)
       done += t.done
       total += t.total
@@ -63,5 +76,23 @@ export const usePlan = defineStore('plan', () => {
     await persist()
   }
 
-  return { plan, progress, loaded, load, matches, status, totals, setDone, setKm, setNote }
+  /**
+   * Replaces the plan with a plan file. Ticks, km and notes are kept: they are keyed by
+   * session id and week number, so sessions that still exist keep their progress.
+   */
+  async function importPlan(data: unknown) {
+    const next = parsePlanFile(data)
+    await db.kv.put({ key: PLAN_KEY, value: toPlanFile(next) })
+    plan.value = next
+    imported.value = true
+    return next
+  }
+
+  async function resetPlan() {
+    await db.kv.delete(PLAN_KEY)
+    plan.value = SOLIRUN_PLAN
+    imported.value = false
+  }
+
+  return { plan, imported, importPlan, resetPlan, progress, loaded, load, matches, status, totals, setDone, setKm, setNote }
 })
