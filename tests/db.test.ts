@@ -69,6 +69,8 @@ describe('backup round-trip', () => {
     await db.kv.put({ key: 'settings', value: { hrMax: 185 } })
     const plan = { done: { 'w2-long': true }, km: { 'w2-long': 7.5 }, notes: { '2': 'legs ok' } }
     await db.kv.put({ key: 'plan-progress', value: plan })
+    const planFile = { format: 'stride-plan', version: 1, id: 'p' }
+    await db.kv.put({ key: 'plan', value: planFile })
 
     const backup = JSON.parse(JSON.stringify(await createBackup(db)))
     expect(backup.activities).toHaveLength(2)
@@ -82,6 +84,7 @@ describe('backup round-trip', () => {
     expect((await other.streams.get(parkrun.id))!.time.length).toBeGreaterThan(10)
     expect((await other.kv.get('settings'))!.value).toEqual({ hrMax: 185 })
     expect((await other.kv.get('plan-progress'))!.value).toEqual(plan)
+    expect((await other.kv.get('plan'))!.value).toEqual(planFile)
   })
 
   it('rejects foreign JSON', () => {

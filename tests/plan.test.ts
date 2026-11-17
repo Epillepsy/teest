@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ActivitySummary } from '@/types'
-import { currentWeekIndex, parseDay, qualityOverview, SOLIRUN_PLAN as plan } from '@/lib/plan/solirun'
+import { currentWeekIndex, parseDay, SOLIRUN_PLAN as plan } from '@/lib/plan/solirun'
 import { emptyProgress, matchRuns, sessionStatus, weekTotals } from '@/lib/plan/progress'
 
 function run(id: string, isoDate: string, km: number, hour = 18): ActivitySummary {
@@ -32,8 +32,9 @@ describe('Soli\'run plan', () => {
   })
 
   it('lists the 11 quality sessions in order', () => {
-    const q = qualityOverview(plan)
-    expect(q.map((x) => x.q)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])
+    const q = plan.quality
+    expect(q.map((x) => x.label)).toEqual(['Q1', 'Q2', 'Q3', 'Q4', 'Q5', 'Q6', 'Q7', 'Q8', 'Q9', 'Q10', 'Q11'])
+    expect(q[0].date).toBe('2026-12-25')
     expect(q[10].week).toBe(17)
   })
 

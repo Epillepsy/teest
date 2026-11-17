@@ -1,7 +1,7 @@
 import type { ActivityStreams, ActivitySummary, Settings } from '@/types'
 import { db, type RunDB } from './db'
 import { saveActivities } from './importer'
-import { PLAN_PROGRESS_KEY, type PlanProgress } from './plan/progress'
+import { PLAN_KEY, PLAN_PROGRESS_KEY, type PlanProgress } from './plan/progress'
 
 export const BACKUP_FORMAT = 'stride-backup'
 export const BACKUP_VERSION = 1
@@ -17,15 +17,18 @@ export interface Backup {
   settings?: Settings
   /** Training plan ticks, km and notes (added without a version bump: older apps ignore it). */
   planProgress?: PlanProgress
+  /** Imported plan file, if any (absent: built-in plan). */
+  plan?: unknown
   activities: BackupActivity[]
 }
 
 export async function createBackup(database: RunDB = db): Promise<Backup> {
-  const [activities, streams, settings, planProgress] = await Promise.all([
+  const [activities, streams, settings, planProgress, plan] = await Promise.all([
     database.activities.orderBy('startTime').toArray(),
     database.streams.toArray(),
     database.kv.get('settings'),
     database.kv.get(PLAN_PROGRESS_KEY),
+    database.kv.get(PLAN_KEY),
   ])
   const byId = new Map(streams.map((s) => [s.id, s]))
   return {
@@ -34,6 +37,7 @@ export async function createBackup(database: RunDB = db): Promise<Backup> {
     exportedAt: new Date().toISOString(),
     settings: settings?.value as Settings | undefined,
     ...(planProgress ? { planProgress: planProgress.value as PlanProgress } : {}),
+    ...(plan ? { plan: plan.value } : {}),
     activities: activities.map((a) => {
       const s = byId.get(a.id)
       if (!s) return a
@@ -66,6 +70,7 @@ export async function restoreBackup(data: unknown, opts: { restoreSettings?: boo
   const results = await saveActivities(items, database)
   if (opts.restoreSettings && backup.settings) await database.kv.put({ key: 'settings', value: backup.settings })
   if (opts.restoreSettings && backup.planProgress) await database.kv.put({ key: PLAN_PROGRESS_KEY, value: backup.planProgress })
+  if (opts.restoreSettings && backup.plan) await database.kv.put({ key: PLAN_KEY, value: backup.plan })
   return {
     added: results.filter((r) => r.status === 'imported').length,
     duplicates: results.filter((r) => r.status === 'duplicate').length,
